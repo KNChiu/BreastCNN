@@ -23,7 +23,7 @@ from model.cnn_cbam import CNN
 import wandb
 import time
 #%%
-EPOCH = 100
+EPOCH = 1000
 
 
 def fit_model(model, train_loader, val_loader):
@@ -37,7 +37,6 @@ def fit_model(model, train_loader, val_loader):
         model.train()
         training_loss = 0
         train_correct = 0
-        y_true, y_score = [], []
 
         for idx, (x, y) in enumerate(train_loader):
             output = model(x.to(device))
@@ -51,13 +50,24 @@ def fit_model(model, train_loader, val_loader):
             loss.backward()
             optimizer.step()
             
-        model.eval()
-        
 
-                
+        model.eval()
+        val_y_true, val_y_score = [], []
+        train_y_true, train_y_score = [], []
+
         with torch.no_grad():
             val_loss = 0
             val_correct = 0
+
+            # print("-----train-----")
+            # for idx, (x, y) in enumerate(train_loader):
+            #     pred = model(x.to(device))
+            #     train_y_score.append(pred[0][1].item())
+            #     # train_y_true.append(y.item())
+            #     print(type(y))
+
+
+            # print("-----val-----")
             for idx, (x_, y_) in enumerate(val_loader):
                 output = model(x_.to(device))
                 val_pred = torch.max(output.data, 1)[1] 
@@ -66,26 +76,39 @@ def fit_model(model, train_loader, val_loader):
                 loss_ = loss_func(output, y_.to(device))
                 val_loss += loss_.item()
 
+                val_y_score.append(output[0][1].item())
+                val_y_true.append(y_.item())
+
         scheduler.step()
 
         train_Acc = np.round(train_correct.item() / 201, 2)
         val_Acc = np.round(val_correct.item() / 25, 2)
+
+        # train_Auc = roc_auc_score(train_y_true, train_y_score)
+        val_Auc = roc_auc_score(val_y_true, val_y_score)
+
+        # y_true, y_score = [], []
+        # with torch.no_grad():
+        #     for idx, (x, y) in enumerate(val_loader):
+        #         pred = model(x.to(device))
+        #         y_score.append(pred[0][1].item())
+        #         y_true.append(y.item())
 
 
         wandb.log({
                     "Train Loss": training_loss,
                     "Val Loss": val_loss,
                     "Train Acc" : train_Acc,
-                    "Val ACC" : val_Acc
+                    "Val ACC" : val_Acc,
                     # "Train Auc" : train_Auc,
-                    # "Val Auc" : val_Auc
+                    "Val Auc" : val_Auc
 
                    })
 
         print('Epoch : {}'.format(epoch + 1))
         print('Train Loss : {}  Val Loss : {}'.format(training_loss, val_loss))
         print('Train Acc : {}  Val Acc : {}'.format(train_Acc, val_Acc))
-        # print('Train Auc : {}  Val Auc : {}'.format(train_Auc, val_Auc))
+        print('Train Auc : {}  Val Auc : {}'.format(0, val_Auc))
         print('=======================================================')
 
 
@@ -114,7 +137,6 @@ def confusion(y_true, y_pred, mode, logPath):
     plt.savefig(logPath+"//"+str(mode)+"_confusion .jpg", bbox_inches='tight')
     plt.close('all')
     # plt.show()
-
     return Accuracy
 
 def FinalTest(model, test_loader, mode, logPath):
@@ -131,7 +153,7 @@ def FinalTest(model, test_loader, mode, logPath):
             y_pred.append(pred.item())
             
             
-    print(str(mode) + '_AUC :', roc_auc_score(y_true, y_score))
+    # print(str(mode) + '_AUC :', roc_auc_score(y_true, y_score))
     fpr, tpr, thresholds = roc_curve(y_true, y_pred)
     
     plt.plot(fpr, tpr, label = str(mode) + '_Auc : {:.2f}'.format(roc_auc_score(y_true, y_score)))
@@ -190,7 +212,6 @@ if __name__ == '__main__':
     
     model = CNN().to(device)
     fit_model(model, train_loader, val_loader)
-    run.finish()
 
     val_true, val_pred = FinalTest(model, val_loader, 'val', logPath)
     confusion(val_true, val_pred, 'val', logPath)
@@ -198,7 +219,7 @@ if __name__ == '__main__':
     y_true, y_pred = FinalTest(model, test_loader, 'test', logPath)
     confusion(y_true, y_pred, 'test', logPath)
 
-
+    run.finish()
     torch.save(model.state_dict(), './weight/cnn_cbam-418' + '.pth')
 
 
